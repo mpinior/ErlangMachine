@@ -47,31 +47,49 @@ wejscie() ->
             io:format("Napoj gotowy! Uwaga gorace. ~n");
         %tutaj trzeba chyba jeszcze rozważyć oddanie błędów? Czy coś takiego 
         {brakWody} ->
-            io:format("Brak wody.  ~n");
+            io:format("Brak wody.  ~n"),
+            wejscie();
         {brakKawy} ->
-            io:format("Brak kawy.  ~n");
+            io:format("Brak kawy.  ~n"),
+            wejscie();
         {brakMleka} ->
-            io:format("Brak mleka.  ~n");
+            io:format("Brak mleka.  ~n"),
+            wejscie();
         {brakHerbaty} ->
-            io:format("Brak herbaty.  ~n");
+            io:format("Brak herbaty.  ~n"),
+            wejscie();
         {brakCukru} ->
-            io:format("Brak cukru.  ~n");
+            io:format("Brak cukru.  ~n"),
+            wejscie();
         {brakCytryny} ->
-            io:format("Brak cytryny.  ~n")
+            io:format("Brak cytryny.  ~n"),
+            wejscie()
     end.
 
-procesor(WejscieId, MagazynId, CzajnikId, BaristaId, PodgrzewaczId, DodatkiId) ->
+procesor(WejscieId, MagazynId, CzajnikId, BaristaId, PodgrzewaczId, DodatkiId, KubekId) ->
     receive
         {init} ->
-            WyjscieId!{self(), init},
-            procesor(WyjscieId, MagazynId, CzajnikId,  BaristaId, PodgrzewaczId, DodatkiId);
+            WejscieId!{self(), init},
+            procesor(WejscieId, MagazynId, CzajnikId,  BaristaId, PodgrzewaczId, DodatkiId, KubekId);
         {monitorOk} ->
             MagazynId!{self(), init},
-            procesor(WyjscieId, MagazynId, CzajnikId, BaristaId, PodgrzewaczId, DodatkiId);
+            procesor(WejscieId, MagazynId, CzajnikId, BaristaId, PodgrzewaczId, DodatkiId, KubekId);
         {magazynOk} ->
-            WyjscieId!{self(), start},
-            procesor(WyjscieId, MagazynId, CzajnikId, BaristaId, PodgrzewaczId, DodatkiId).
+            WejscieId!{self(), start},
+            procesor(WejscieId, MagazynId, CzajnikId, BaristaId, PodgrzewaczId, DodatkiId, KubekId);
         %Magazyn ma zasoby na dany napoj 
+        {magazynMaZasoby,Skladniki} ->
+            UsedWoda = element(1,Skladniki),
+            UsedKawa = element(2,Skladniki),
+            UsedMleko = element(3,Skladniki),
+
+
+            CzajnikId!{self(),gotujWode,UsedWoda},
+            MlynekId!{self(),mielKawe,UsedKawa},
+            PodgrzewaczId!{self(),grzejMleko,UsedMleko}
+
+    end.
+
 
 
 
@@ -90,7 +108,6 @@ magazyn(Stan) ->
             Id!{magazynOk},
             magazyn(Stan1);
         {Id, stan} ->
-            Id!{[Stan], komunikat,komunikatLine()},
             Id!{gotowe},
             magazyn({Woda, Kawa, Mleko, Herbata, Cukier, Cytryna});
         {Id, napoj, NumerNapoju} ->
@@ -160,13 +177,8 @@ magazyn(Stan) ->
                         magazyn({Woda, Kawa, Mleko, Herbata, Cukier, Cytryna})
                 end,
 
-                %Wyswietlamy stan produktow
-                % bardziej zeby pokazac ze magayn dziala- klient nie ma potrzeby wiedziec ile surowcow zostalo w magazynie
-                % w klienckiej wersji mozna 2ponizsze linie zakomentowac
-                Id!{etykieta,stanProduktowLine(),"Stan: "},
-                Id!{zmienna,stanProduktowLine(),{WodaLeft, KawaLeft, MlekoLeft, HerbataLeft, KakaoLeft}},
-                %raportujemy JednostceCentralnej ze mamy potrzebne zasoby
-                Id!{magazynMaZasoby,{UsedWoda,UsedKawa,UsedMleko,UsedHerbata,UsedKakao}},
-                %aktualizacja stanu magazynu
-                magazyn({WodaLeft, KawaLeft, MlekoLeft, HerbataLeft, KakaoLeft})
+                %info do procesora, że mamy zasoby 
+                Id!{magazynMaZasoby,{UsedWoda,UsedKawa,UsedMleko,UsedHerbata,UsedCukier, UsedCytryna}},
+                %aktualizacja magazynu 
+                magazyn({WodaLeft, KawaLeft, MlekoLeft, HerbataLeft, CukierLeft, CytrynaLeft})
     end.
