@@ -2,20 +2,20 @@
 -compile([export_all]).
 
 %potrzebne do magazynu, przechowywane w krotce
-%woda, kawa, mleko, herbata, cukier, cytryna 
-initStanMagazynu() -> {1500, 500, 700, 500, 600, 30}.
+%woda, kawa, mleko, herbata, cukier, kubek  
+initStanMagazynu() -> {1500, 500, 700, 500, 600, 400}.
 
 %dla kazdego numeru wybiera się krotkę z składnikami jakich potrzebuje
 %kawa czarna, kawa z mlekiem, cappuccino, herbata, mleko
-%woda, kawa, mleko, herbata, cytryna
-%cukier będzie dodane w trakcie ?
+%woda, kawa, mleko, herbata
+%cukru i kubka nie trzeba dodawać, kubek używa się za każdym razem, cukier tylko na życzenie 
 skladniki(Num) -> 
     element(Num,{
-    { 5, 3, 0, 0, 0},
-    { 4, 3, 1, 0, 0},
-    { 3, 2, 2, 0, 0},
-    { 5, 0, 0, 3, 1},
-    { 0, 0, 5, 0, 0} 
+    { 5, 3, 0, 0},
+    { 4, 3, 1, 0},
+    { 3, 2, 2, 0},
+    { 5, 0, 0, 3},
+    { 0, 0, 5, 0} 
     }).
 
 %Wyświetlanie menu
@@ -29,7 +29,21 @@ menu() ->
             | herbata          - 4. |
             | mleko            - 5. |
             _________________________
+Zakoncz dzialanie, wcisnij: k
 Wybierz numer napoju: ").
+
+%rozpoczecie 
+start() ->
+    Wejscie = spawn(projekt, wejscie, []),
+    Magazyn = spawn(projekt, magazyn, [initStanMagazynu()]),
+    Czajnik = spawn(projekt, czajnik,[]),
+    Mlynek = spawn(projekt, mlynek,[]),
+    Gotowe = spawn(projekt, zakonczProcesy,[]),
+    Podgrzewacz = spawn(projekt, podgrzewacz,[]),
+    Kubek = spawn(projekt, kubek, []),
+    DanieCukru = spawn(projekt, dajCukier, []),
+    Procesor = spawn(projekt, procesor, [Wejscie, Magazyn, Czajnik, Mlynek, Gotowe, Podgrzewacz, Kubek, DanieCukru]),
+    Procesor!{init}.
 
 %obsługa wejścia/wyjścia 
 wejscie() ->
@@ -40,11 +54,15 @@ wejscie() ->
             wejscie();
         {Id, start} -> 
             menu(),
-            Napoj = io:get_chars("", 1),
-            Id!{Napoj},
+            Napoj = io:get_line(""),
+            CzyCukier = io:get_line("Ilosc cukru (0/1/2):"),
+            Id!{Napoj, CzyCukier},
             wejscie();
+        {przetwarzanie} ->
+            io:format("Prosze czekac, trwa przygotowywanie napoju ~n");
         {koniec} ->
             io:format("Napoj gotowy! Uwaga gorace. ~n");
+        
         %tutaj trzeba chyba jeszcze rozważyć oddanie błędów? Czy coś takiego 
         {brakWody} ->
             io:format("Brak wody.  ~n"),
@@ -63,31 +81,120 @@ wejscie() ->
             wejscie();
         {brakCytryny} ->
             io:format("Brak cytryny.  ~n"),
-            wejscie()
+            wejscie();
+        {brakKubkow} ->
+            io:format("Brak kubkow. Nie mozna przygotowac zadnego napoju. Przepraszamy za utrudnienia. ~n"),
+            erlang:error("Zakonczenie dzialania. Przypadek krytyczny - brak kubkow")
     end.
 
-procesor(WejscieId, MagazynId, CzajnikId, BaristaId, PodgrzewaczId, DodatkiId, KubekId) ->
+procesor(Wejscie, Magazyn, Czajnik, Mlynek, Gotowe, Podgrzewacz, Kubek, DanieCukru) ->
     receive
         {init} ->
-            WejscieId!{self(), init},
-            procesor(WejscieId, MagazynId, CzajnikId,  BaristaId, PodgrzewaczId, DodatkiId, KubekId);
-        {monitorOk} ->
-            MagazynId!{self(), init},
-            procesor(WejscieId, MagazynId, CzajnikId, BaristaId, PodgrzewaczId, DodatkiId, KubekId);
+            Wejscie!{self(), init},
+            procesor(Wejscie, Magazyn, Czajnik, Mlynek, Gotowe, Podgrzewacz,Kubek, DanieCukru);
+        {wejscieOk} ->
+            Magazyn!{self(), init},
+            procesor(Wejscie, Magazyn, Czajnik, Mlynek, Gotowe, Podgrzewacz, Kubek, DanieCukru);
         {magazynOk} ->
-            WejscieId!{self(), start},
-            procesor(WejscieId, MagazynId, CzajnikId, BaristaId, PodgrzewaczId, DodatkiId, KubekId);
+            Wejscie!{self(), start},
+            procesor(Wejscie, Magazyn, Czajnik, Mlynek, Gotowe, Podgrzewacz, Kubek, DanieCukru);
+        {Napoj, CzyCukier} ->
+            Wejscie!{przetwarzanie},
+            %zamiana pobranego stringa na int
+            %dlaczego tak: to_string zwraca krotkę, pierwszy element to zamieniona liczba, a drugi to reszta. 
+            {NapojInt, _} = string:to_integer(Napoj),
+            {CukierInt, _} = string:to_integer(CzyCukier),
+            %wyslanie info do magazynu
+            Magazyn!{self(), napoj, NapojInt, CukierInt};
         %Magazyn ma zasoby na dany napoj 
-        {magazynMaZasoby,Skladniki} ->
-            UsedWoda = element(1,Skladniki),
-            UsedKawa = element(2,Skladniki),
-            UsedMleko = element(3,Skladniki),
+        {magazynMaZasoby} ->
+            Czajnik!{self(),gotujWode},
+            Mlynek!{self(),mielKawe},
+            %podgrzewalabym mleko tylko kiedy trzeba uzyc mleka, da sie to zrobic, ale chyba braknie wtedy wspolbieznych?
+            Podgrzewacz!{self(),podgrzejMleko},
+            Kubek!{self(),dajKubek},
+            procesor(Wejscie, Magazyn, Czajnik, Mlynek, Gotowe, Podgrzewacz, Kubek, DanieCukru);
+        {woda, zagotowana} ->
+            Gotowe!{self(), woda},
+            procesor(Wejscie, Magazyn, Czajnik, Mlynek, Gotowe, Podgrzewacz, Kubek, DanieCukru);
+        {kawa, zmielona} ->
+            Gotowe!{self(), kawa},
+            procesor(Wejscie, Magazyn, Czajnik, Mlynek, Gotowe, Podgrzewacz, Kubek, DanieCukru);
+        {mleko, podgrzane} ->
+            Gotowe!{self(), mleko},
+            procesor(Wejscie, Magazyn, Czajnik, Mlynek, Gotowe, Podgrzewacz, Kubek, DanieCukru);
+        {kubek, wystawiony} ->
+            Gotowe!{self(), kubek},
+            procesor(Wejscie, Magazyn, Czajnik, Mlynek, Gotowe, Podgrzewacz, Kubek, DanieCukru);
+        {cukier, wsypany} ->
+            Gotowe!{self(), cukier},
+            procesor(Wejscie, Magazyn, Czajnik, Mlynek, Gotowe, Podgrzewacz, Kubek, DanieCukru);
+        {gotowe} ->
+            Wejscie!{koniec},
+            timer:sleep(4000),
+            Wejscie!{self(), start},
+            procesor(Wejscie, Magazyn, Czajnik, Mlynek, Gotowe, Podgrzewacz, Kubek, DanieCukru)
+    end.
 
+%opóźniamy proces działania czajnika, ponieważ woda się długo gotuje 
+czajnik() ->
+    receive
+        {Id, gotujWode} ->
+            timer:sleep(8000),
+            Id!{woda,zagotowana},
+            czajnik()
+    end.
 
-            CzajnikId!{self(),gotujWode,UsedWoda},
-            MlynekId!{self(),mielKawe,UsedKawa},
-            PodgrzewaczId!{self(),grzejMleko,UsedMleko}
+mlynek() ->
+    receive
+        {Id, mielKawe} ->
+            timer:sleep(3000),
+            Id!{kawa, zmielona},
+            mlynek()
+    end.
 
+podgrzewacz() ->
+    receive
+        {Id, podgrzejMleko} ->
+            timer:sleep(5000),
+            Id!{mleko, podgrzane},
+            mlynek()
+    end.
+
+kubek()->
+    receive
+        {Id, dajKubek} ->
+            timer:sleep(1000),
+            Id!{kubek, wystawiony},
+            mlynek()
+    end.
+
+dajCukier() ->
+    receive
+        {Id, dajCukier} ->
+            timer:sleep(2000),
+            Id!{cukier, wsypany},
+            dajCukier()
+    end.
+
+%łączenie wykonywania wszystkich czynności
+zakonczProcesy() ->
+    receive
+        {Id,kubek} ->
+            receive
+                {Id, cukier} ->
+                    receive
+                        {Id, kawa} ->
+                            receive
+                                {Id, mleko} ->
+                                    receive
+                                        {Id, woda} ->
+                                            Id!{gotowe},
+                                            zakonczProcesy()
+                                    end
+                            end
+                    end
+            end
     end.
 
 
@@ -100,7 +207,7 @@ magazyn(Stan) ->
     Mleko = element(3, Stan),
     Herbata = element(4, Stan),
     Cukier = element(5, Stan),
-    Cytryna = element(6, Stan),
+    Kubek = element(6, Stan),
     receive
         {Id, init} ->
             timer:sleep(20),
@@ -109,16 +216,16 @@ magazyn(Stan) ->
             magazyn(Stan1);
         {Id, stan} ->
             Id!{gotowe},
-            magazyn({Woda, Kawa, Mleko, Herbata, Cukier, Cytryna});
-        {Id, napoj, NumerNapoju} ->
+            magazyn({Woda, Kawa, Mleko, Herbata, Cukier, Kubek});
+        {Id, napoj, NumerNapoju, IloscCukru} ->
                 %wyciaganie skladnikow danego napoju
                 Skladniki = skladniki(NumerNapoju),
                 UsedWoda = element(1,Skladniki),
                 UsedKawa = element(2,Skladniki),
                 UsedMleko = element(3,Skladniki),
                 UsedHerbata = element(4,Skladniki),
-                UsedCukier = element(5,Skladniki),
-                UsedCytryna = element(6, Skladniki),
+                UsedCukier = IloscCukru, 
+                UsedKubek = 1,
                 
                 %obliczanie ile zostanie po produkcji
                 WodaLeft = Woda - UsedWoda,
@@ -126,7 +233,7 @@ magazyn(Stan) ->
                 MlekoLeft = Mleko - UsedMleko,
                 HerbataLeft = Herbata - UsedHerbata,
                 CukierLeft = Cukier - UsedCukier,
-                CytrynaLeft = Cytryna - UsedCytryna,
+                KubekLeft = Kubek - UsedKubek,
 
                 %jezeli jakiegos zasobu jest za malo do produkcji bedzie stosowny komunikat
                 case WodaLeft<0 of
@@ -134,7 +241,7 @@ magazyn(Stan) ->
                     true -> Id!{brakWody},
                         timer:sleep(3000),
                         Id!{gotowe},
-                        magazyn({Woda, Kawa, Mleko, Herbata, Cukier, Cytryna})
+                        magazyn({Woda, Kawa, Mleko, Herbata, Cukier,  Kubek})
                 end,
 
                 case KawaLeft<0 of
@@ -142,7 +249,7 @@ magazyn(Stan) ->
                     true -> Id!{brakKawy},
                         timer:sleep(3000),
                         Id!{gotowe},
-                        magazyn({Woda, Kawa, Mleko, Herbata, Cukier, Cytryna})
+                        magazyn({Woda, Kawa, Mleko, Herbata, Cukier,  Kubek})
                 end,
 
                 case MlekoLeft<0 of
@@ -150,7 +257,7 @@ magazyn(Stan) ->
                     true -> Id!{brakMleka},
                         timer:sleep(3000),
                         Id!{gotowe},
-                        magazyn({Woda, Kawa, Mleko, Herbata, Cukier, Cytryna})
+                        magazyn({Woda, Kawa, Mleko, Herbata, Cukier,  Kubek})
                 end,
 
                 case HerbataLeft<0 of
@@ -158,7 +265,7 @@ magazyn(Stan) ->
                     true -> Id!{brakHerbaty},
                         timer:sleep(3000),
                         Id!{gotowe},
-                        magazyn({Woda, Kawa, Mleko, Herbata, Cukier, Cytryna})
+                        magazyn({Woda, Kawa, Mleko, Herbata, Cukier, Kubek})
                 end,
 
                 case CukierLeft<0 of
@@ -166,19 +273,19 @@ magazyn(Stan) ->
                     true -> Id!{brakCukru},
                         timer:sleep(3000),
                         Id!{gotowe},
-                        magazyn({Woda, Kawa, Mleko, Herbata, Cukier, Cytryna})
+                        magazyn({Woda, Kawa, Mleko, Herbata, Cukier, Kubek})
                 end,
 
-                case CytrynaLeft<0 of
+                case KubekLeft<0 of
                     false -> null;
-                    true -> Id!{brakCytryny},
+                    true -> Id!{brakKubkow},
                         timer:sleep(3000),
                         Id!{gotowe},
-                        magazyn({Woda, Kawa, Mleko, Herbata, Cukier, Cytryna})
+                        magazyn({Woda, Kawa, Mleko, Herbata, Cukier, Kubek})
                 end,
 
                 %info do procesora, że mamy zasoby 
-                Id!{magazynMaZasoby,{UsedWoda,UsedKawa,UsedMleko,UsedHerbata,UsedCukier, UsedCytryna}},
+                Id!{magazynMaZasoby},
                 %aktualizacja magazynu 
-                magazyn({WodaLeft, KawaLeft, MlekoLeft, HerbataLeft, CukierLeft, CytrynaLeft})
+                magazyn({WodaLeft, KawaLeft, MlekoLeft, HerbataLeft, CukierLeft, KubekLeft})
     end.

@@ -1,15 +1,13 @@
 -module(test).
 -compile([export_all]).
 
-print({gotoxy,X,Y}) ->
-   io:format("\e[~p;~pH",[Y,X]);
-print({printxy,X,Y,Msg}) ->
-   io:format("\e[~p;~pH~p",[Y,X,Msg]);   
-print({clear}) ->
-   io:format("\e[2J",[]);
-print({tlo}) ->
-   print({printxy,2,4,1.2343}),  
-   io:format("a",[])  .
-   
-printxy({X,Y,Msg}) ->
-   io:format("\e[~p;~pH~p~n",[Y,X,Msg]).
+start() ->
+   io:format("Wybierz napoj: "),
+   Napoj = io:get_line(""),
+   io:format("Ilosc cukru (0/1/2): "),
+   CzyCukier = io:get_line(""),
+   {NapojInt, _} = string:to_integer(Napoj),
+   io:format("czy wypisuje ~n"),
+   io:format("~w", [NapojInt]),
+   {CukierInt, _} = string:to_integer(CzyCukier),
+   io:format("~w", [CukierInt]).
