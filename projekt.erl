@@ -5,6 +5,9 @@
 %woda, kawa, mleko, herbata, cukier, kubek  
 initStanMagazynu() -> {1500, 500, 700, 500, 600, 400}.
 
+%woda, kawa, mleko, cukier, kubek
+procesySkonczone() -> [].
+
 %dla kazdego numeru wybiera się krotkę z składnikami jakich potrzebuje
 %kawa czarna, kawa z mlekiem, cappuccino, herbata, mleko
 %woda, kawa, mleko, herbata
@@ -38,7 +41,7 @@ start() ->
     Magazyn = spawn(projekt, magazyn, [initStanMagazynu()]),
     Czajnik = spawn(projekt, czajnik,[]),
     Mlynek = spawn(projekt, mlynek,[]),
-    Gotowe = spawn(projekt, zakonczProcesy,[]),
+    Gotowe = spawn(projekt, zakonczProcesy,[procesySkonczone()]),
     Podgrzewacz = spawn(projekt, podgrzewacz,[]),
     Kubek = spawn(projekt, kubek, []),
     DanieCukru = spawn(projekt, dajCukier, []),
@@ -108,11 +111,12 @@ procesor(Wejscie, Magazyn, Czajnik, Mlynek, Gotowe, Podgrzewacz, Kubek, DanieCuk
             Magazyn!{self(), napoj, NapojInt, CukierInt};
         %Magazyn ma zasoby na dany napoj 
         {magazynMaZasoby} ->
+            io:format("uruchomienie wszystkich procesow"),
             Czajnik!{self(),gotujWode},
             Mlynek!{self(),mielKawe},
-            %podgrzewalabym mleko tylko kiedy trzeba uzyc mleka, da sie to zrobic, ale chyba braknie wtedy wspolbieznych?
             Podgrzewacz!{self(),podgrzejMleko},
             Kubek!{self(),dajKubek},
+            DanieCukru!{self, dajCukier},
             procesor(Wejscie, Magazyn, Czajnik, Mlynek, Gotowe, Podgrzewacz, Kubek, DanieCukru);
         {woda, zagotowana} ->
             Gotowe!{self(), woda},
@@ -141,6 +145,7 @@ czajnik() ->
     receive
         {Id, gotujWode} ->
             timer:sleep(8000),
+            io:format("woda konczy"),
             Id!{woda,zagotowana},
             czajnik()
     end.
@@ -149,6 +154,7 @@ mlynek() ->
     receive
         {Id, mielKawe} ->
             timer:sleep(3000),
+            io:format("kawa konczy"),
             Id!{kawa, zmielona},
             mlynek()
     end.
@@ -157,6 +163,7 @@ podgrzewacz() ->
     receive
         {Id, podgrzejMleko} ->
             timer:sleep(5000),
+            io:format("mleko konczy"),
             Id!{mleko, podgrzane},
             mlynek()
     end.
@@ -165,6 +172,7 @@ kubek()->
     receive
         {Id, dajKubek} ->
             timer:sleep(1000),
+            io:format("kubek konczy"),
             Id!{kubek, wystawiony},
             mlynek()
     end.
@@ -173,32 +181,59 @@ dajCukier() ->
     receive
         {Id, dajCukier} ->
             timer:sleep(2000),
+            io:format("cukier konczy"),
             Id!{cukier, wsypany},
             dajCukier()
     end.
 
 %łączenie wykonywania wszystkich czynności
-zakonczProcesy() ->
+% zakonczProcesy() ->
+%     receive
+%         {Id,kubek} ->
+%             receive
+%                 {Id, cukier} ->
+%                     receive
+%                         {Id, kawa} ->
+%                             receive
+%                                 {Id, mleko} ->
+%                                     receive
+%                                         {Id, woda} ->
+%                                             Id!{gotowe},
+%                                             zakonczProcesy()
+%                                     end
+%                             end
+%                     end
+%             end
+%     end.
+
+zakonczProcesy(Tab) ->
     receive
-        {Id,kubek} ->
-            receive
-                {Id, cukier} ->
-                    receive
-                        {Id, kawa} ->
-                            receive
-                                {Id, mleko} ->
-                                    receive
-                                        {Id, woda} ->
-                                            Id!{gotowe},
-                                            zakonczProcesy()
-                                    end
-                            end
-                    end
-            end
+        {Id, woda} ->
+            Tab1 = [1|Tab],
+            io:format("Tablica ~w", [Tab]),
+            zakonczProcesy(Tab1);
+        {Id, kawa} ->
+            Tab1 = [1|Tab],
+            io:format("Tablica ~w", [Tab]),
+            zakonczProcesy(Tab1);
+        {Id, melko} ->
+            Tab1 = [1|Tab],
+            io:format("Tablica ~w", [Tab]),
+            zakonczProcesy(Tab1);
+        {Id, cukier} ->
+            Tab1 = [1|Tab],
+            io:format("Tablica ~w", [Tab]),
+            zakonczProcesy(Tab1);
+        {Id, kubek} ->
+            Tab1 = [1|Tab],
+            io:format("Tablica ~w", [Tab]),
+            zakonczProcesy(Tab1)
+    end,
+
+    if Tab == [1,1,1,1,1] ->
+            Id!{gotowe};
+            true -> zakonczProcesy(Tab)
     end.
-
-
-
 
 magazyn(Stan) ->
     %pobranie aktualnych zasobow produktow
@@ -285,6 +320,7 @@ magazyn(Stan) ->
                 end,
 
                 %info do procesora, że mamy zasoby 
+                io:format("Magazyn konczy"),
                 Id!{magazynMaZasoby},
                 %aktualizacja magazynu 
                 magazyn({WodaLeft, KawaLeft, MlekoLeft, HerbataLeft, CukierLeft, KubekLeft})
