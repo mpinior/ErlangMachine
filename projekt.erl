@@ -24,14 +24,14 @@ skladniki(Num) ->
 %Wyświetlanie menu
 menu() ->
     io:format("
-            >--------(MENU)--------<
-            _________________________
-            | kawa czarna      - 1. |
-            | kawa z mlekiem   - 2. |
-            | cappuccino       - 3. |
-            | herbata          - 4. |
-            | mleko            - 5. |
-            _________________________
+            >*********(MENU)********<
+            *************************
+            * kawa czarna      - 1. *
+            * kawa z mlekiem   - 2. *
+            * cappuccino       - 3. *
+            * herbata          - 4. *
+            * mleko            - 5. *
+            *************************
 Zakoncz dzialanie, wcisnij: k
 Wybierz numer napoju: ").
 
@@ -113,29 +113,37 @@ procesor(Wejscie, Magazyn, Czajnik, Mlynek, Gotowe, Podgrzewacz, Kubek, DanieCuk
             Magazyn!{self(), napoj, NapojInt, CukierInt},
             procesor(Wejscie, Magazyn, Czajnik, Mlynek, Gotowe, Podgrzewacz, Kubek, DanieCukru);
         %Magazyn ma zasoby na dany napoj 
-        {gotowyDoPracy} ->
+        {gotowyDoPracy, UsedCukier} ->
             Czajnik!{self(),gotujWode},
             Mlynek!{self(),mielKawe},
             Podgrzewacz!{self(),podgrzejMleko},
             Kubek!{self(),dajKubek},
-            DanieCukru!{self(), dajCukier},
+            if UsedCukier == 0 -> Gotowe!{bezcukru};
+                true -> DanieCukru!{self(), dajCukier}
+            end,
             procesor(Wejscie, Magazyn, Czajnik, Mlynek, Gotowe, Podgrzewacz, Kubek, DanieCukru);
         {woda, zagotowana} ->
+            io:format("Nalewam wode...  ~n"),
             Gotowe!{self(), woda},
             procesor(Wejscie, Magazyn, Czajnik, Mlynek, Gotowe, Podgrzewacz, Kubek, DanieCukru);
         {kawa, zmielona} ->
+            io:format("Zmielono kawe...  ~n"),
             Gotowe!{self(), kawa},
             procesor(Wejscie, Magazyn, Czajnik, Mlynek, Gotowe, Podgrzewacz, Kubek, DanieCukru);
         {mleko, podgrzane} ->
+            io:format("Podgrzano mleko...  ~n"),
             Gotowe!{self(), mleko},
             procesor(Wejscie, Magazyn, Czajnik, Mlynek, Gotowe, Podgrzewacz, Kubek, DanieCukru);
         {kubek, wystawiony} ->
+            io:format("Wystawiono kubek...  ~n"),
             Gotowe!{self(), kubek},
             procesor(Wejscie, Magazyn, Czajnik, Mlynek, Gotowe, Podgrzewacz, Kubek, DanieCukru);
         {cukier, wsypany} ->
+            io:format("Wsypano cukier...  ~n"),
             Gotowe!{self(), cukier},
             procesor(Wejscie, Magazyn, Czajnik, Mlynek, Gotowe, Podgrzewacz, Kubek, DanieCukru);
         {gotowe} ->
+            Gotowe!{inicjalizacjaTab},
             Wejscie!{zakonczenie},
             timer:sleep(4000),
             Wejscie!{self(), start},
@@ -145,6 +153,8 @@ procesor(Wejscie, Magazyn, Czajnik, Mlynek, Gotowe, Podgrzewacz, Kubek, DanieCuk
     end.
 
 %opóźniamy proces działania czajnika, ponieważ woda się długo gotuje 
+%ten etap w kazdym procesie jest inny, bo kazda rzecz trwa inaczej czasowo, np. kubek dostaje sie szybko, najdluzej gotuje sie woda
+%przez to wydaje sie, ze procesy wykonuja sie synchronicznie, ale one dzialaja wspolnie, a dopiero przy "wydawaniu" kubka sa laczone, co daje zludzenie synchronicznosci
 czajnik() ->
     receive
         {Id, gotujWode} ->
@@ -187,36 +197,46 @@ daCukier() ->
 
 zakonczProcesy(Tab) ->
     receive
+        {inicjalizacjaTab} ->
+            zakonczProcesy(procesySkonczone());
+        {bezcukru} ->
+            Tab1 = [1|Tab],
+            zakonczProcesy(Tab1);
         {Id, woda} ->
             Tab1 = [1|Tab],
             case Tab1 == [1,1,1,1,1] of
-                    false -> zakonczProcesy(Tab1);
+                    false -> null;
                     true -> Id!{gotowe}
-            end;
+            end,
+            zakonczProcesy(Tab1);
         {Id, kawa} ->
             Tab1 = [1|Tab],
             case Tab1 == [1,1,1,1,1] of
-                    false -> zakonczProcesy(Tab1);
+                    false -> null;
                     true -> Id!{gotowe}
-            end;
+            end,
+            zakonczProcesy(Tab1);
         {Id, mleko} ->
             Tab1 = [1|Tab],
             case Tab1 == [1,1,1,1,1] of
-                    false -> zakonczProcesy(Tab1);
+                    false -> null;
                     true -> Id!{gotowe}
-            end;
+            end,
+            zakonczProcesy(Tab1);
         {Id, cukier} ->
             Tab1 = [1|Tab],
             case Tab1 == [1,1,1,1,1] of
-                    false -> zakonczProcesy(Tab1);
+                    false -> null;
                     true -> Id!{gotowe}
-            end;
+            end,
+            zakonczProcesy(Tab1);
         {Id, kubek} ->
             Tab1 = [1|Tab],
             case Tab1 == [1,1,1,1,1] of
-                    false -> zakonczProcesy(Tab1);
+                    false -> null;
                     true -> Id!{gotowe}
-            end
+            end,
+            zakonczProcesy(Tab1)
     end.
 
 magazyn(Stan) ->
@@ -303,7 +323,7 @@ magazyn(Stan) ->
                 end,
 
                 %info do procesora, że mamy zasoby 
-                Id!{gotowyDoPracy},
+                Id!{gotowyDoPracy, UsedCukier},
                 %aktualizacja magazynu
                 magazyn({WodaLeft, KawaLeft, MlekoLeft, HerbataLeft, CukierLeft, KubekLeft})
     end.
